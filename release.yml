@@ -1,0 +1,95 @@
+name: 🚀 Создание релиза
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  release:
+    name: 📦 Релиз v${{ github.run_number }}
+    runs-on: ubuntu-latest
+    environment: production
+
+    env:
+      REGISTRY_URL: cr.yandex
+      APP_NAME: app
+      YC_REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
+      DOCKER_IMAGE_LATEST: ${{ format('{0}/{1}/{2}:{3}_latest', env.REGISTRY_URL, env.YC_REGISTRY_ID, env.APP_NAME, github.run_number) }}
+      DOCKER_IMAGE_VERSIONED: ${{ format('{0}/{1}/{2}:{3}', env.REGISTRY_URL, env.YC_REGISTRY_ID, env.APP_NAME, github.run_number) }}
+
+    steps:
+      - name: 🔍 Checkout кода
+        uses: actions/checkout@v4
+
+      - name: 🧠 Настройка Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 📦 Установка зависимостей
+        run: npm ci
+
+      - name: 🧹 Параллельная проверка: линтер
+        run: npm run lint
+
+      - name: 🧪 Параллельная проверка: тесты
+        run: npm run test
+
+      - name: 🌲 Создание релизной ветки
+        run: |
+          git config --global user.email "github-actions@example.com"
+          git config --global user.name "GitHub Actions"
+          git checkout -b releases/${{ github.run_number }}
+          git push origin releases/${{ github.run_number }}
+
+      - name: 🐳 Сборка Docker-образа
+        run: |
+          docker build -t $DOCKER_IMAGE_VERSIONED .
+          docker tag $DOCKER_IMAGE_VERSIONED $DOCKER_IMAGE_LATEST
+
+      - name: 🔐 Авторизация в Yandex Container Registry
+        run: |
+          echo "${{ secrets.YC_OAUTH_TOKEN }}" | docker login --username oauth --password-stdin $REGISTRY_URL
+
+      - name: 📤 Загрузка образа в Container Registry
+        run: |
+          docker push $DOCKER_IMAGE_VERSIONED
+          docker push $DOCKER_IMAGE_LATEST
+
+      - name: 🏷 Создание тега версии
+        run: |
+          git tag v${{ github.run_number }}
+          git push origin v${{ github.run_number }}
+
+      - name: 📜 Получение списка коммитов с прошлого релиза
+        id: commits
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ || echo 'initial')
+          COMMITS=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD)
+          echo "commits=$COMMITS" >> $GITHUB_ENV
+
+      - name: 📝 Обновление CHANGELOG.md
+        run: |
+          NEW_ENTRY="## v${{ github.run_number }}\n$(date '+%Y-%m-%d')\n$COMMITS\n"
+          sed -i "1i\\$NEW_ENTRY\n" CHANGELOG.md || echo -e "$NEW_ENTRY\n" > CHANGELOG.md
+          git add CHANGELOG.md
+          git commit -m "docs: обновление CHANGELOG для v${{ github.run_number }}"
+          git push origin main
+
+      - name: 🧾 Создание Issue о релизе
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const body = `
+              📅 Дата: ${new Date().toISOString()}
+              👨‍💻 Автор: ${{ github.actor }}
+              📦 Версия: v${{ github.run_number }}
+              📦 Docker image: $DOCKER_IMAGE_VERSIONED
+              📌 Коммиты с прошлого релиза:
+              ${{ env.COMMITS }}
+            `;
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚀 Выпуск релиза v${{ github.run_number }}`,
+              body: body
+            });
