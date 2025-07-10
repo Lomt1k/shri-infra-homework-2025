@@ -82,16 +82,26 @@ jobs:
           
           echo "commits=$COMMITS" >> $GITHUB_ENV
 
+      - name: 🔄 Переключиться на main
+        run: |
+          git checkout main
+
       - name: 📝 Обновление CHANGELOG.md
         run: |
           NEW_ENTRY="## v${{ github.run_number }}\n$(date '+%Y-%m-%d')\n$COMMITS\n"
+
           if [ -f CHANGELOG.md ]; then
-            sed -i "1i\\$NEW_ENTRY\n" CHANGELOG.md
+            if ! grep -q "v${{ github.run_number }}" CHANGELOG.md; then
+              sed -i "1i\\$NEW_ENTRY" CHANGELOG.md
+            else
+              echo "Запись для v${{ github.run_number }} уже существует в CHANGELOG.md"
+            fi
           else
-            echo -e "$NEW_ENTRY\n" > CHANGELOG.md
+            echo -e "$NEW_ENTRY" > CHANGELOG.md
           fi
+
           git add CHANGELOG.md
-          git commit -m "docs: обновление CHANGELOG для v${{ github.run_number }}"
+          git diff-index --quiet HEAD || git commit -m "docs: обновление CHANGELOG для v${{ github.run_number }}"
           git push origin main
 
       - name: 🧾 Создание Issue о релизе
