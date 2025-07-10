@@ -13,8 +13,6 @@ jobs:
       REGISTRY_URL: cr.yandex
       APP_NAME: app
       YC_REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
-      DOCKER_IMAGE_LATEST: ${{ format('{0}/{1}/{2}:{3}_latest', env.REGISTRY_URL, env.YC_REGISTRY_ID, env.APP_NAME, github.run_number) }}
-      DOCKER_IMAGE_VERSIONED: ${{ format('{0}/{1}/{2}:{3}', env.REGISTRY_URL, env.YC_REGISTRY_ID, env.APP_NAME, github.run_number) }}
 
     steps:
       - name: 🔍 Checkout кода
@@ -23,15 +21,15 @@ jobs:
       - name: 🧠 Настройка Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 18
 
       - name: 📦 Установка зависимостей
         run: npm ci
 
-      - name: 🧹 Параллельная проверка - Линтер
+      - name: 🧹 Параллельная проверка - линтер
         run: npm run lint
 
-      - name: 🧪 Параллельная проверка - Тесты
+      - name: 🧪 Параллельная проверка - тесты
         run: npm run test
 
       - name: 🌲 Создание релизной ветки
@@ -43,6 +41,8 @@ jobs:
 
       - name: 🐳 Сборка Docker-образа
         run: |
+          DOCKER_IMAGE_LATEST=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.run_number }}_latest
+          DOCKER_IMAGE_VERSIONED=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.run_number }}
           docker build -t $DOCKER_IMAGE_VERSIONED .
           docker tag $DOCKER_IMAGE_VERSIONED $DOCKER_IMAGE_LATEST
 
@@ -52,6 +52,8 @@ jobs:
 
       - name: 📤 Загрузка образа в Container Registry
         run: |
+          DOCKER_IMAGE_LATEST=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.run_number }}_latest
+          DOCKER_IMAGE_VERSIONED=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.run_number }}
           docker push $DOCKER_IMAGE_VERSIONED
           docker push $DOCKER_IMAGE_LATEST
 
@@ -70,7 +72,11 @@ jobs:
       - name: 📝 Обновление CHANGELOG.md
         run: |
           NEW_ENTRY="## v${{ github.run_number }}\n$(date '+%Y-%m-%d')\n$COMMITS\n"
-          sed -i "1i\\$NEW_ENTRY\n" CHANGELOG.md || echo -e "$NEW_ENTRY\n" > CHANGELOG.md
+          if [ -f CHANGELOG.md ]; then
+            sed -i "1i\\$NEW_ENTRY\n" CHANGELOG.md
+          else
+            echo -e "$NEW_ENTRY\n" > CHANGELOG.md
+          fi
           git add CHANGELOG.md
           git commit -m "docs: обновление CHANGELOG для v${{ github.run_number }}"
           git push origin main
@@ -83,13 +89,13 @@ jobs:
               📅 Дата: ${new Date().toISOString()}
               👨‍💻 Автор: ${{ github.actor }}
               📦 Версия: v${{ github.run_number }}
-              📦 Docker image: $DOCKER_IMAGE_VERSIONED
+              📦 Docker image: ${{ env.REGISTRY_URL }}/${{ env.YC_REGISTRY_ID }}/${{ env.APP_NAME }}:${{ github.run_number }}
               📌 Коммиты с прошлого релиза:
               ${{ env.COMMITS }}
             `;
             github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `🚀 Выпуск релиза v${{ github.run_number }}`,
+              title: "🚀 Выпуск релиза v${{ github.run_number }}",
               body: body
             });
