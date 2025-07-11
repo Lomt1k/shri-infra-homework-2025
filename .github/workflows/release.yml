@@ -95,22 +95,24 @@ jobs:
           docker push $DOCKER_IMAGE_VERSIONED
           docker push $DOCKER_IMAGE_LATEST
 
-      - name: 🔄 Переключиться на main
+      - name: 📝 Обновление CHANGELOG.md через Pull Request
+        id: changelog
         run: |
-          git checkout main
-          git pull origin main
-
-      - name: 📝 Обновление CHANGELOG.md
-        run: |
+          # Преобразуем ESCAPED_COMMITS обратно в многострочный текст
           NEW_ENTRY="## v${{ github.run_number }}\n$(date '+%Y-%m-%d')\n$ESCAPED_COMMITS\n"
           NEW_ENTRY=$(echo "$NEW_ENTRY" | sed 's/\\n/\n/g')
 
+          # Переключаемся на новую ветку
+          git checkout -b update-changelog/v${{ github.run_number }}
+
+          # Обновляем CHANGELOG
           if [ -f CHANGELOG.md ]; then
             if ! grep -q "v${{ github.run_number }}" CHANGELOG.md; then
-              echo "Добавляем новую запись в CHANGELOG.md"
+              echo "Обновляем существующий CHANGELOG.md"
               echo -e "$NEW_ENTRY" | cat - CHANGELOG.md > temp && mv temp CHANGELOG.md
             else
               echo "Запись для v${{ github.run_number }} уже существует в CHANGELOG.md"
+              exit 0
             fi
           else
             echo "Создаём новый файл CHANGELOG.md"
@@ -118,12 +120,22 @@ jobs:
           fi
 
           git add CHANGELOG.md
-          if git diff-index --quiet HEAD -- CHANGELOG.md; then
-            echo "Изменений в CHANGELOG.md не найдено"
-          else
-            git commit -m "docs: обновление CHANGELOG для v${{ github.run_number }}"
-            git push origin main
-          fi
+          git config --global user.email "github-actions@example.com"
+          git config --global user.name "GitHub Actions"
+          git commit -m "docs: обновление CHANGELOG для v${{ github.run_number }}"
+          git push origin update-changelog/v${{ github.run_number }} --force
+
+          echo "changelog_branch=update-changelog/v${{ github.run_number }}" >> $GITHUB_OUTPUT
+
+      - name: 🔄 Создание Pull Request для CHANGELOG
+        uses: peter-evans/create-pull-request@v5
+        with:
+          title: "docs: обновление CHANGELOG для v${{ github.run_number }}"
+          body: "Автоматически сгенерированное обновление CHANGELOG после релиза v${{ github.run_number }}"
+          head-branch: ${{ steps.changelog.outputs.changelog_branch }}
+          base-branch: main
+          draft: false
+          delete-head-branch: true
 
       - name: 🧾 Создание Issue о релизе
         uses: actions/github-script@v6
