@@ -50,6 +50,8 @@ jobs:
           git fetch --tags
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo 'initial')
 
+          echo "LAST_TAG: $LAST_TAG"
+
           if [ "$LAST_TAG" = "initial" ]; then
             if git rev-parse --verify HEAD > /dev/null 2>&1; then
               COMMITS="Первый релиз"
@@ -65,7 +67,8 @@ jobs:
           fi
 
           ESCAPED_COMMITS=$(echo "$COMMITS" | sed -z 's/\n/\\n/g')
-          echo "commits=$ESCAPED_COMMITS" >> $GITHUB_OUTPUT
+
+          printf 'commits=%s\n' "$ESCAPED_COMMITS" >> $GITHUB_OUTPUT
 
       - name: 🌲 Создание релизной ветки
         run: |
@@ -97,7 +100,32 @@ jobs:
           docker push $DOCKER_IMAGE_VERSIONED
           docker push $DOCKER_IMAGE_LATEST
 
-      - name: 📝 Обновление CHANGELOG.md через Pull Request
+      - name: 🧾 Создание Issue о релизе
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const lines = process.env.COMMITS ? process.env.COMMITS.split('\\n') : ['Нет новых коммитов'];
+            const formatted = lines.join('\n');
+
+            const body = `
+              📅 Дата: ${new Date().toISOString()}
+              👨‍💻 Автор: ${{ github.actor }}
+              📦 Версия: ${{ github.run_number }}
+              📦 Docker image: ${{ env.REGISTRY_URL }}://${{ env.YC_REGISTRY_ID }}://${{ env.APP_NAME }}:${{ github.run_number }}
+              📌 Коммиты с прошлого релиза:
+              ${formatted}
+            `;
+
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: "🚀 Выпуск релиза v${{ github.run_number }}",
+              body: body
+            });
+        env:
+          COMMITS: ${{ steps.commits.outputs.commits }}
+
+      - name: 📝 Обновление CHANGELOG.md
         id: changelog
         run: |
           NEW_ENTRY="## v${{ github.run_number }}\n$(date '+%Y-%m-%d')\n$ESCAPED_COMMITS\n"
@@ -126,55 +154,31 @@ jobs:
 
           echo "changelog_branch=update-changelog/v${{ github.run_number }}" >> $GITHUB_OUTPUT
 
-      - name: 🔄 Ручное создание Pull Request через GitHub API
-        id: create_pr
+      - name: 🔄 Ручное создание Pull Request с обновленным CHANGELOG.md через GitHub API
         uses: actions/github-script@v6
         with:
           script: |
-            const { pr } = await github.rest.pulls.create({
+            await github.rest.pulls.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: "docs: обновление CHANGELOG для v${{ github.run_number }}",
-              head: process.env.changelog_branch,
+              head: "${{ steps.changelog.outputs.changelog_branch }}",
               base: "main",
               body: "Автоматически сгенерированное обновление CHANGELOG после релиза v${{ github.run_number }}"
             });
-            return pr.number;
 
-      - name: ⏱ Ждём немного перед мерджем
+      - name: ⏱ Ждём 5 секунд перед мержем
         run: sleep 5
 
-      - name: 🔥 Принудительный мердж PR
+      - name: 🔐 Авторизация через GH CLI и мерж PR
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          gh auth login --with-token <<< "$GH_TOKEN"
+          # Авторизация с токеном через stdin
+          echo "$GH_TOKEN" | gh auth login --with-token
 
+          # Получаем номер последнего PR из нужной ветки
           PR_NUMBER=$(gh pr list --head update-changelog/v${{ github.run_number }} --json number --jq '.[0].number')
 
+          # Мержим PR с админскими правами
           gh pr merge $PR_NUMBER --merge --admin --delete-branch
-
-      - name: 🧾 Создание Issue о релизе
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const lines = context.env.commits ? context.env.commits.split('\\n') : ['Нет новых коммитов'];
-            const formatted = lines.join('\n');
-
-            const body = `
-              📅 Дата: ${new Date().toISOString()}
-              👨‍💻 Автор: ${{ github.actor }}
-              📦 Версия: ${{ github.run_number }}
-              📦 Docker image: ${{ env.REGISTRY_URL }}://${{ env.YC_REGISTRY_ID }}://${{ env.APP_NAME }}:${{ github.run_number }}
-              📌 Коммиты с прошлого релиза:
-              ${formatted}
-            `;
-
-            github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: "🚀 Выпуск релиза v${{ github.run_number }}",
-              body: body
-            });
-        env:
-          commits: ${{ steps.commits.outputs.commits }}
