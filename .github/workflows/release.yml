@@ -57,11 +57,6 @@ jobs:
           docker push $DOCKER_IMAGE_VERSIONED
           docker push $DOCKER_IMAGE_LATEST
 
-      - name: 🏷 Создание тега версии
-        run: |
-          git tag v${{ github.run_number }}
-          git push origin v${{ github.run_number }}
-
       - name: 📜 Получение списка коммитов с прошлого релиза
         id: commits
         run: |
@@ -89,6 +84,11 @@ jobs:
 
           # Сохраняем результат в GITHUB_OUTPUT
           echo "commits=$COMMITS" >> $GITHUB_OUTPUT
+
+      - name: 🏷 Создание тега версии
+        run: |
+          git tag v${{ github.run_number }}
+          git push origin v${{ github.run_number }}
 
       - name: 🔄 Переключиться на main
         run: |
