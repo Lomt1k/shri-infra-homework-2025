@@ -9,6 +9,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
 
+    permissions:
+      contents: write
+      pull-requests: write
+
     env:
       REGISTRY_URL: cr.yandex
       APP_NAME: app
@@ -40,12 +44,9 @@ jobs:
           git tag
 
       - name: 📜 Получение списка коммитов с прошлого релиза
-        id: commits
         run: |
           git fetch --tags
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo 'initial')
-
-          echo "LAST_TAG: $LAST_TAG"
 
           if [ "$LAST_TAG" = "initial" ]; then
             if git rev-parse --verify HEAD > /dev/null 2>&1; then
@@ -62,7 +63,6 @@ jobs:
           fi
 
           ESCAPED_COMMITS=$(echo "$COMMITS" | sed -z 's/\n/\\n/g')
-
           printf 'commits=%s\n' "$ESCAPED_COMMITS" >> $GITHUB_OUTPUT
 
       - name: 🌲 Создание релизной ветки
@@ -98,14 +98,11 @@ jobs:
       - name: 📝 Обновление CHANGELOG.md через Pull Request
         id: changelog
         run: |
-          # Преобразуем ESCAPED_COMMITS обратно в многострочный текст
           NEW_ENTRY="## v${{ github.run_number }}\n$(date '+%Y-%m-%d')\n$ESCAPED_COMMITS\n"
           NEW_ENTRY=$(echo "$NEW_ENTRY" | sed 's/\\n/\n/g')
 
-          # Переключаемся на новую ветку
           git checkout -b update-changelog/v${{ github.run_number }}
 
-          # Обновляем CHANGELOG
           if [ -f CHANGELOG.md ]; then
             if ! grep -q "v${{ github.run_number }}" CHANGELOG.md; then
               echo "Обновляем существующий CHANGELOG.md"
@@ -125,14 +122,14 @@ jobs:
           git commit -m "docs: обновление CHANGELOG для v${{ github.run_number }}"
           git push origin update-changelog/v${{ github.run_number }} --force
 
-          echo "changelog_branch=update-changelog/v${{ github.run_number }}" >> $GITHUB_OUTPUT
+          echo "CHANGELOG_BRANCH=update-changelog/v${{ github.run_number }}" >> $GITHUB_ENV
 
       - name: 🔄 Создание Pull Request для CHANGELOG
         uses: peter-evans/create-pull-request@v5
         with:
           title: "docs: обновление CHANGELOG для v${{ github.run_number }}"
           body: "Автоматически сгенерированное обновление CHANGELOG после релиза v${{ github.run_number }}"
-          head-branch: ${{ steps.changelog.outputs.changelog_branch }}
+          head-branch: ${{ env.CHANGELOG_BRANCH }}
           base-branch: main
           draft: false
           delete-head-branch: true
