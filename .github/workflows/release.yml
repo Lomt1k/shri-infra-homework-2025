@@ -42,35 +42,27 @@ jobs:
       - name: 📜 Получение списка коммитов с прошлого релиза
         id: commits
         run: |
-          # Забираем все теги из удалённого репозитория
           git fetch --tags
-
-          # Ищем последний существующий тег
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo 'initial')
 
           echo "LAST_TAG: $LAST_TAG"
 
           if [ "$LAST_TAG" = "initial" ]; then
-            # Если тегов нет, проверяем, есть ли хотя бы один коммит
             if git rev-parse --verify HEAD > /dev/null 2>&1; then
               COMMITS="Первый релиз"
             else
               COMMITS="Репозиторий пуст"
             fi
           else
-            # Получаем коммиты между последним тегом и текущим состоянием
             COMMITS=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD)
           fi
 
-          # Если список коммитов пустой
           if [ -z "$COMMITS" ]; then
             COMMITS="Нет новых коммитов"
           fi
 
-          # Преобразуем перевод строки в \n для безопасной передачи через GITHUB_OUTPUT
           ESCAPED_COMMITS=$(echo "$COMMITS" | sed -z 's/\n/\\n/g')
 
-          # Сохраняем результат в GITHUB_OUTPUT
           printf 'commits=%s\n' "$ESCAPED_COMMITS" >> $GITHUB_OUTPUT
 
       - name: 🌲 Создание релизной ветки
@@ -110,7 +102,6 @@ jobs:
 
       - name: 📝 Обновление CHANGELOG.md
         run: |
-          # Восстанавливаем переводы строк
           NEW_ENTRY="## v${{ github.run_number }}\n$(date '+%Y-%m-%d')\n$ESCAPED_COMMITS\n"
           NEW_ENTRY=$(echo "$NEW_ENTRY" | sed 's/\\n/\n/g')
 
@@ -138,14 +129,18 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
+            const lines = process.env.COMMITS ? process.env.COMMITS.split('\\n') : ['Нет новых коммитов'];
+            const formatted = lines.join('\n');
+
             const body = `
               📅 Дата: ${new Date().toISOString()}
               👨‍💻 Автор: ${{ github.actor }}
               📦 Версия: ${{ github.run_number }}
               📦 Docker image: ${{ env.REGISTRY_URL }}://${{ env.YC_REGISTRY_ID }}://${{ env.APP_NAME }}:${{ github.run_number }}
               📌 Коммиты с прошлого релиза:
-              ${{ steps.commits.outputs.commits.replace(/\\n/g, '\n') }}
+              ${formatted}
             `;
+
             github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
