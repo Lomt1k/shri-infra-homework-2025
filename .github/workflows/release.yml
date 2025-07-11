@@ -127,7 +127,10 @@ jobs:
 
       - name: 📝 Обновление CHANGELOG.md
         id: changelog
+        env:
+          ESCAPED_COMMITS: ${{ steps.commits.outputs.commits }}
         run: |
+          # Преобразуем ESCAPED_COMMITS обратно в многострочный текст
           NEW_ENTRY="## v${{ github.run_number }}\n$(date '+%Y-%m-%d')\n$ESCAPED_COMMITS\n"
           NEW_ENTRY=$(echo "$NEW_ENTRY" | sed 's/\\n/\n/g')
 
