@@ -18,7 +18,7 @@ jobs:
       - name: 🔍 Checkout кода
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Важно: получаем все теги и историю
+          fetch-depth: 0  # Получаем всю историю и теги
 
       - name: 🧠 Настройка Node.js
         uses: actions/setup-node@v4
@@ -67,8 +67,8 @@ jobs:
             COMMITS="Нет новых коммитов"
           fi
 
-          # Сохраняем результат в GITHUB_OUTPUT
-          echo "commits=$COMMITS" >> $GITHUB_OUTPUT
+          # Экранируем символы и сохраняем результат в GITHUB_OUTPUT
+          printf 'commits=%s\n' "$COMMITS" >> $GITHUB_OUTPUT
 
       - name: 🌲 Создание релизной ветки
         run: |
