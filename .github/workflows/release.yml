@@ -26,10 +26,10 @@ jobs:
       - name: 📦 Установка зависимостей
         run: npm ci
 
-      - name: 🧹 Параллельная проверка - линтер
+      - name: 🧹 Параллельная проверка — линтер
         run: npm run lint
 
-      - name: 🧪 Параллельная проверка - тесты
+      - name: 🧪 Параллельная проверка — тесты
         run: npm run test
 
       - name: 🌲 Создание релизной ветки
@@ -65,35 +65,29 @@ jobs:
       - name: 📜 Получение списка коммитов с прошлого релиза
         id: commits
         run: |
-          # Попробуем найти предыдущий тег (используя HEAD^)
-          LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo 'initial')
-          
+          # Ищем последний существующий тег
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo 'initial')
+
           echo "LAST_TAG: $LAST_TAG"  # Отладочная информация
-          
-          # Проверяем, существует ли текущий коммит
-          if ! git rev-parse --verify HEAD > /dev/null 2>&1; then
-            echo "Текущий коммит не найден"
-            COMMITS="Репозиторий пуст"
-          else
-            # Если LAST_TAG — это 'initial', значит, тегов нет, используем HEAD~1
-            if [ "$LAST_TAG" = "initial" ]; then
-              # Проверяем, есть ли хотя бы один коммит
-              if git rev-parse --verify HEAD~1 > /dev/null 2>&1; then
-                COMMITS=$(git log --pretty=format:"- %s" HEAD~1..HEAD)
-              else
-                COMMITS="Первый релиз"
-              fi
+
+          if [ "$LAST_TAG" = "initial" ]; then
+            # Если тегов нет, проверяем, есть ли хотя бы один коммит
+            if git rev-parse --verify HEAD > /dev/null 2>&1; then
+              COMMITS="Первый релиз"
             else
-              COMMITS=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD)
+              COMMITS="Репозиторий пуст"
             fi
+          else
+            # Получаем коммиты между последним тегом и текущим состоянием
+            COMMITS=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD)
           fi
-          
-          # Если список коммитов пустой, добавим сообщение
+
+          # Если список коммитов пустой
           if [ -z "$COMMITS" ]; then
             COMMITS="Нет новых коммитов"
           fi
 
-          # Сохраняем COMMITS в GITHUB_OUTPUT для доступа из других шагов
+          # Сохраняем результат в GITHUB_OUTPUT
           echo "commits=$COMMITS" >> $GITHUB_OUTPUT
 
       - name: 🔄 Переключиться на main
@@ -133,7 +127,7 @@ jobs:
               📅 Дата: ${new Date().toISOString()}
               👨‍💻 Автор: ${{ github.actor }}
               📦 Версия: ${{ github.run_number }}
-              📦 Docker image: ${{ env.REGISTRY_URL }}/${{ env.YC_REGISTRY_ID }}/${{ env.APP_NAME }}:${{ github.run_number }}
+              📦 Docker image: ${{ env.REGISTRY_URL }}://${{ env.YC_REGISTRY_ID }}://${{ env.APP_NAME }}:${{ github.run_number }}
               📌 Коммиты с прошлого релиза:
               ${{ steps.commits.outputs.commits }}
             `;
