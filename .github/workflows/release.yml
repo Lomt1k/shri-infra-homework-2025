@@ -51,23 +51,26 @@ jobs:
           echo "LAST_TAG: $LAST_TAG"
 
           if [ "$LAST_TAG" = "initial" ]; then
+            # Если тегов нет, проверяем, есть ли хотя бы один коммит
             if git rev-parse --verify HEAD > /dev/null 2>&1; then
               COMMITS="Первый релиз"
             else
               COMMITS="Репозиторий пуст"
             fi
           else
+            # Получаем коммиты между последним тегом и текущим состоянием
             COMMITS=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD)
           fi
 
+          # Если список коммитов пустой
           if [ -z "$COMMITS" ]; then
             COMMITS="Нет новых коммитов"
           fi
 
-          # Экранируем символы в начале строк
-          ESCAPED_COMMITS=$(echo "$COMMITS" | sed 's/^- /• /')
+          # Преобразуем перевод строки в \n для безопасной передачи через GITHUB_OUTPUT
+          ESCAPED_COMMITS=$(echo "$COMMITS" | sed -z 's/\n/\\n/g')
 
-          # Сохраняем результат
+          # Сохраняем результат в GITHUB_OUTPUT
           printf 'commits=%s\n' "$ESCAPED_COMMITS" >> $GITHUB_OUTPUT
 
       - name: 🌲 Создание релизной ветки
@@ -107,12 +110,14 @@ jobs:
 
       - name: 📝 Обновление CHANGELOG.md
         run: |
+          # Восстанавливаем переводы строк
           NEW_ENTRY="## v${{ github.run_number }}\n$(date '+%Y-%m-%d')\n$ESCAPED_COMMITS\n"
+          NEW_ENTRY=$(echo "$NEW_ENTRY" | sed 's/\\n/\n/g')
 
           if [ -f CHANGELOG.md ]; then
             if ! grep -q "v${{ github.run_number }}" CHANGELOG.md; then
               echo "Добавляем новую запись в CHANGELOG.md"
-              sed -i "1i\\$NEW_ENTRY" CHANGELOG.md
+              echo -e "$NEW_ENTRY" | cat - CHANGELOG.md > temp && mv temp CHANGELOG.md
             else
               echo "Запись для v${{ github.run_number }} уже существует в CHANGELOG.md"
             fi
@@ -139,7 +144,7 @@ jobs:
               📦 Версия: ${{ github.run_number }}
               📦 Docker image: ${{ env.REGISTRY_URL }}://${{ env.YC_REGISTRY_ID }}://${{ env.APP_NAME }}:${{ github.run_number }}
               📌 Коммиты с прошлого релиза:
-              ${{ steps.commits.outputs.commits }}
+              ${{ steps.commits.outputs.commits.replace(/\\n/g, '\n') }}
             `;
             github.rest.issues.create({
               owner: context.repo.owner,
@@ -147,3 +152,5 @@ jobs:
               title: "🚀 Выпуск релиза v${{ github.run_number }}",
               body: body
             });
+        env:
+          COMMITS: ${{ steps.commits.outputs.commits }}
