@@ -9,6 +9,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
 
+    permissions:
+      contents: write
+      pull-requests: write
+
     env:
       REGISTRY_URL: cr.yandex
       APP_NAME: app
@@ -98,14 +102,11 @@ jobs:
       - name: 📝 Обновление CHANGELOG.md через Pull Request
         id: changelog
         run: |
-          # Преобразуем ESCAPED_COMMITS обратно в многострочный текст
           NEW_ENTRY="## v${{ github.run_number }}\n$(date '+%Y-%m-%d')\n$ESCAPED_COMMITS\n"
           NEW_ENTRY=$(echo "$NEW_ENTRY" | sed 's/\\n/\n/g')
 
-          # Переключаемся на новую ветку
           git checkout -b update-changelog/v${{ github.run_number }}
 
-          # Обновляем CHANGELOG
           if [ -f CHANGELOG.md ]; then
             if ! grep -q "v${{ github.run_number }}" CHANGELOG.md; then
               echo "Обновляем существующий CHANGELOG.md"
@@ -127,15 +128,18 @@ jobs:
 
           echo "changelog_branch=update-changelog/v${{ github.run_number }}" >> $GITHUB_OUTPUT
 
-      - name: 🔄 Создание Pull Request для CHANGELOG
-        uses: peter-evans/create-pull-request@v5
+      - name: 🔄 Ручное создание Pull Request через GitHub API
+        uses: actions/github-script@v6
         with:
-          title: "docs: обновление CHANGELOG для v${{ github.run_number }}"
-          body: "Автоматически сгенерированное обновление CHANGELOG после релиза v${{ github.run_number }}"
-          head-branch: ${{ steps.changelog.outputs.changelog_branch }}
-          base-branch: main
-          draft: false
-          delete-head-branch: true
+          script: |
+            await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: "docs: обновление CHANGELOG для v${{ github.run_number }}",
+              head: "${{ steps.changelog.outputs.changelog_branch }}",
+              base: "main",
+              body: "Автоматически сгенерированное обновление CHANGELOG после релиза v${{ github.run_number }}"
+            });
 
       - name: 🧾 Создание Issue о релизе
         uses: actions/github-script@v6
