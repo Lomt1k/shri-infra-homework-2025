@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: 🔍 Checkout кода
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Важно: получаем все теги и историю
 
       - name: 🧠 Настройка Node.js
         uses: actions/setup-node@v4
