@@ -111,7 +111,7 @@ jobs:
             const body = `
               📅 Дата: ${new Date().toISOString()}
               👨‍💻 Автор: ${{ github.actor }}
-              📦 Версия: v${{ github.run_number }}
+              📦 Версия: ${{ github.run_number }}
               📦 Docker image: ${{ env.REGISTRY_URL }}/${{ env.YC_REGISTRY_ID }}/${{ env.APP_NAME }}:${{ github.run_number }}
               📌 Коммиты с прошлого релиза:
               ${{ env.COMMITS }}
