@@ -100,7 +100,32 @@ jobs:
           docker push $DOCKER_IMAGE_VERSIONED
           docker push $DOCKER_IMAGE_LATEST
 
-      - name: 📝 Обновление CHANGELOG.md через Pull Request
+      - name: 🧾 Создание Issue о релизе
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const lines = process.env.COMMITS ? process.env.COMMITS.split('\\n') : ['Нет новых коммитов'];
+            const formatted = lines.join('\n');
+
+            const body = `
+              📅 Дата: ${new Date().toISOString()}
+              👨‍💻 Автор: ${{ github.actor }}
+              📦 Версия: ${{ github.run_number }}
+              📦 Docker image: ${{ env.REGISTRY_URL }}://${{ env.YC_REGISTRY_ID }}://${{ env.APP_NAME }}:${{ github.run_number }}
+              📌 Коммиты с прошлого релиза:
+              ${formatted}
+            `;
+
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: "🚀 Выпуск релиза v${{ github.run_number }}",
+              body: body
+            });
+        env:
+          COMMITS: ${{ steps.commits.outputs.commits }}
+
+      - name: 📝 Обновление CHANGELOG.md
         id: changelog
         run: |
           NEW_ENTRY="## v${{ github.run_number }}\n$(date '+%Y-%m-%d')\n$ESCAPED_COMMITS\n"
@@ -129,32 +154,7 @@ jobs:
 
           echo "changelog_branch=update-changelog/v${{ github.run_number }}" >> $GITHUB_OUTPUT
 
-      - name: 🧾 Создание Issue о релизе
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const lines = process.env.COMMITS ? process.env.COMMITS.split('\\n') : ['Нет новых коммитов'];
-            const formatted = lines.join('\n');
-
-            const body = `
-              📅 Дата: ${new Date().toISOString()}
-              👨‍💻 Автор: ${{ github.actor }}
-              📦 Версия: ${{ github.run_number }}
-              📦 Docker image: ${{ env.REGISTRY_URL }}://${{ env.YC_REGISTRY_ID }}://${{ env.APP_NAME }}:${{ github.run_number }}
-              📌 Коммиты с прошлого релиза:
-              ${formatted}
-            `;
-
-            github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: "🚀 Выпуск релиза v${{ github.run_number }}",
-              body: body
-            });
-        env:
-          COMMITS: ${{ steps.commits.outputs.commits }}
-
-      - name: 🔄 Ручное создание Pull Request через GitHub API
+      - name: 🔄 Ручное создание Pull Request с обновленным CHANGELOG.md через GitHub API
         uses: actions/github-script@v6
         with:
           script: |
@@ -166,3 +166,13 @@ jobs:
               base: "main",
               body: "Автоматически сгенерированное обновление CHANGELOG после релиза v${{ github.run_number }}"
             });
+
+      - name: ⏱ Ждём 5 секунд перед мержем
+        run: sleep 5
+
+      - name: 🔐 Мерж PR с новым CHANGELOG.md
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          gh auth login --with-token <<< "$GH_TOKEN"
+          gh pr merge ${{ steps.create_pr.output }} --merge --admin --delete-branch
