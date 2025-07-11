@@ -68,6 +68,8 @@ jobs:
           # Попробуем найти последний тег
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo 'initial')
           
+          echo "LAST_TAG: $LAST_TAG"  # Отладочная информация
+          
           # Если LAST_TAG — это 'initial', значит, тегов нет, используем HEAD~1
           if [ "$LAST_TAG" = "initial" ]; then
             COMMITS=$(git log --pretty=format:"- %s" HEAD~1..HEAD)
@@ -80,8 +82,8 @@ jobs:
             COMMITS="Нет новых коммитов"
           fi
 
-          # Сохраняем как output
-          echo "::set-output name=commits::$COMMITS"
+          # Сохраняем COMMITS в GITHUB_OUTPUT для доступа из других шагов
+          echo "commits=$COMMITS" >> $GITHUB_OUTPUT
 
       - name: 🔄 Переключиться на main
         run: |
