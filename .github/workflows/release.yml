@@ -79,12 +79,14 @@ jobs:
           if [ -z "$COMMITS" ]; then
             COMMITS="Нет новых коммитов"
           fi
-          
-          echo "commits=$COMMITS" >> $GITHUB_ENV
+
+          # Сохраняем как output
+          echo "::set-output name=commits::$COMMITS"
 
       - name: 🔄 Переключиться на main
         run: |
           git checkout main
+          git pull origin main
 
       - name: 📝 Обновление CHANGELOG.md
         run: |
@@ -92,17 +94,23 @@ jobs:
 
           if [ -f CHANGELOG.md ]; then
             if ! grep -q "v${{ github.run_number }}" CHANGELOG.md; then
+              echo "Добавляем новую запись в CHANGELOG.md"
               sed -i "1i\\$NEW_ENTRY" CHANGELOG.md
             else
               echo "Запись для v${{ github.run_number }} уже существует в CHANGELOG.md"
             fi
           else
+            echo "Создаём новый файл CHANGELOG.md"
             echo -e "$NEW_ENTRY" > CHANGELOG.md
           fi
 
           git add CHANGELOG.md
-          git diff-index --quiet HEAD || git commit -m "docs: обновление CHANGELOG для v${{ github.run_number }}"
-          git push origin main
+          if git diff-index --quiet HEAD -- CHANGELOG.md; then
+            echo "Изменений в CHANGELOG.md не найдено"
+          else
+            git commit -m "docs: обновление CHANGELOG для v${{ github.run_number }}"
+            git push origin main
+          fi
 
       - name: 🧾 Создание Issue о релизе
         uses: actions/github-script@v6
@@ -114,7 +122,7 @@ jobs:
               📦 Версия: ${{ github.run_number }}
               📦 Docker image: ${{ env.REGISTRY_URL }}/${{ env.YC_REGISTRY_ID }}/${{ env.APP_NAME }}:${{ github.run_number }}
               📌 Коммиты с прошлого релиза:
-              ${{ env.COMMITS }}
+              ${{ steps.commits.outputs.commits }}
             `;
             github.rest.issues.create({
               owner: context.repo.owner,
