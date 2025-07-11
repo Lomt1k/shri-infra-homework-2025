@@ -128,19 +128,6 @@ jobs:
 
           echo "changelog_branch=update-changelog/v${{ github.run_number }}" >> $GITHUB_OUTPUT
 
-      - name: 🔄 Ручное создание Pull Request через GitHub API
-        uses: actions/github-script@v6
-        with:
-          script: |
-            await github.rest.pulls.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: "docs: обновление CHANGELOG для v${{ github.run_number }}",
-              head: "${{ steps.changelog.outputs.changelog_branch }}",
-              base: "main",
-              body: "Автоматически сгенерированное обновление CHANGELOG после релиза v${{ github.run_number }}"
-            });
-
       - name: 🧾 Создание Issue о релизе
         uses: actions/github-script@v6
         with:
@@ -165,3 +152,16 @@ jobs:
             });
         env:
           COMMITS: ${{ steps.commits.outputs.commits }}
+
+      - name: 🔄 Ручное создание Pull Request через GitHub API
+        uses: actions/github-script@v6
+        with:
+          script: |
+            await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: "docs: обновление CHANGELOG для v${{ github.run_number }}",
+              head: "${{ steps.changelog.outputs.changelog_branch }}",
+              base: "main",
+              body: "Автоматически сгенерированное обновление CHANGELOG после релиза v${{ github.run_number }}"
+            });
