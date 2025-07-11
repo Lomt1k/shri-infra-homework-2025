@@ -32,39 +32,17 @@ jobs:
       - name: 🧪 Параллельная проверка — тесты
         run: npm run test
 
-      - name: 🌲 Создание релизной ветки
+      - name: 📋 Посмотреть все теги (для отладки)
         run: |
-          git config --global user.email "github-actions@example.com"
-          git config --global user.name "GitHub Actions"
-          git checkout -b releases/${{ github.run_number }}
-          git push origin releases/${{ github.run_number }}
-
-      - name: 🔄 Переключиться на main
-        run: |
-          git checkout main
-          git pull origin main
-
-      - name: 🐳 Сборка Docker-образа
-        run: |
-          DOCKER_IMAGE_LATEST=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.run_number }}_latest
-          DOCKER_IMAGE_VERSIONED=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.run_number }}
-          docker build -t $DOCKER_IMAGE_VERSIONED .
-          docker tag $DOCKER_IMAGE_VERSIONED $DOCKER_IMAGE_LATEST
-
-      - name: 🔐 Авторизация в Yandex Container Registry
-        run: |
-          echo "${{ secrets.YC_OAUTH_TOKEN }}" | docker login --username oauth --password-stdin $REGISTRY_URL
-
-      - name: 📤 Загрузка образа в Container Registry
-        run: |
-          DOCKER_IMAGE_LATEST=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.run_number }}_latest
-          DOCKER_IMAGE_VERSIONED=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.run_number }}
-          docker push $DOCKER_IMAGE_VERSIONED
-          docker push $DOCKER_IMAGE_LATEST
+          git fetch --tags
+          git tag
 
       - name: 📜 Получение списка коммитов с прошлого релиза
         id: commits
         run: |
+          # Забираем все теги из удалённого репозитория
+          git fetch --tags
+
           # Ищем последний существующий тег
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo 'initial')
 
@@ -90,10 +68,40 @@ jobs:
           # Сохраняем результат в GITHUB_OUTPUT
           echo "commits=$COMMITS" >> $GITHUB_OUTPUT
 
+      - name: 🌲 Создание релизной ветки
+        run: |
+          git config --global user.email "github-actions@example.com"
+          git config --global user.name "GitHub Actions"
+          git checkout -b releases/${{ github.run_number }}
+          git push origin releases/${{ github.run_number }}
+
       - name: 🏷 Создание тега версии
         run: |
           git tag v${{ github.run_number }}
           git push origin v${{ github.run_number }}
+
+      - name: 🐳 Сборка Docker-образа
+        run: |
+          DOCKER_IMAGE_LATEST=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.run_number }}_latest
+          DOCKER_IMAGE_VERSIONED=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.run_number }}
+          docker build -t $DOCKER_IMAGE_VERSIONED .
+          docker tag $DOCKER_IMAGE_VERSIONED $DOCKER_IMAGE_LATEST
+
+      - name: 🔐 Авторизация в Yandex Container Registry
+        run: |
+          echo "${{ secrets.YC_OAUTH_TOKEN }}" | docker login --username oauth --password-stdin $REGISTRY_URL
+
+      - name: 📤 Загрузка образа в Container Registry
+        run: |
+          DOCKER_IMAGE_LATEST=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.run_number }}_latest
+          DOCKER_IMAGE_VERSIONED=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.run_number }}
+          docker push $DOCKER_IMAGE_VERSIONED
+          docker push $DOCKER_IMAGE_LATEST
+
+      - name: 🔄 Переключиться на main
+        run: |
+          git checkout main
+          git pull origin main
 
       - name: 📝 Обновление CHANGELOG.md
         run: |
