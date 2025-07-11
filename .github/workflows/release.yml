@@ -65,16 +65,27 @@ jobs:
       - name: 📜 Получение списка коммитов с прошлого релиза
         id: commits
         run: |
-          # Найдём предыдущий тег (используя HEAD^)
+          # Попробуем найти предыдущий тег (используя HEAD^)
           LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo 'initial')
           
           echo "LAST_TAG: $LAST_TAG"  # Отладочная информация
           
-          # Если LAST_TAG — это 'initial', значит, тегов нет, используем HEAD~1
-          if [ "$LAST_TAG" = "initial" ]; then
-            COMMITS=$(git log --pretty=format:"- %s" HEAD~1..HEAD)
+          # Проверяем, существует ли текущий коммит
+          if ! git rev-parse --verify HEAD > /dev/null 2>&1; then
+            echo "Текущий коммит не найден"
+            COMMITS="Репозиторий пуст"
           else
-            COMMITS=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD)
+            # Если LAST_TAG — это 'initial', значит, тегов нет, используем HEAD~1
+            if [ "$LAST_TAG" = "initial" ]; then
+              # Проверяем, есть ли хотя бы один коммит
+              if git rev-parse --verify HEAD~1 > /dev/null 2>&1; then
+                COMMITS=$(git log --pretty=format:"- %s" HEAD~1..HEAD)
+              else
+                COMMITS="Первый релиз"
+              fi
+            else
+              COMMITS=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD)
+            fi
           fi
           
           # Если список коммитов пустой, добавим сообщение
