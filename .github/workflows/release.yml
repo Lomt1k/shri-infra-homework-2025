@@ -48,27 +48,27 @@ jobs:
           # Ищем последний существующий тег
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo 'initial')
 
-          echo "LAST_TAG: $LAST_TAG"  # Отладочная информация
+          echo "LAST_TAG: $LAST_TAG"
 
           if [ "$LAST_TAG" = "initial" ]; then
-            # Если тегов нет, проверяем, есть ли хотя бы один коммит
             if git rev-parse --verify HEAD > /dev/null 2>&1; then
               COMMITS="Первый релиз"
             else
               COMMITS="Репозиторий пуст"
             fi
           else
-            # Получаем коммиты между последним тегом и текущим состоянием
             COMMITS=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD)
           fi
 
-          # Если список коммитов пустой
           if [ -z "$COMMITS" ]; then
             COMMITS="Нет новых коммитов"
           fi
 
-          # Экранируем символы и сохраняем результат в GITHUB_OUTPUT
-          printf 'commits=%s\n' "$COMMITS" >> $GITHUB_OUTPUT
+          # Экранируем символы в начале строк
+          ESCAPED_COMMITS=$(echo "$COMMITS" | sed 's/^- /• /')
+
+          # Сохраняем результат
+          printf 'commits=%s\n' "$ESCAPED_COMMITS" >> $GITHUB_OUTPUT
 
       - name: 🌲 Создание релизной ветки
         run: |
@@ -107,7 +107,7 @@ jobs:
 
       - name: 📝 Обновление CHANGELOG.md
         run: |
-          NEW_ENTRY="## v${{ github.run_number }}\n$(date '+%Y-%m-%d')\n$COMMITS\n"
+          NEW_ENTRY="## v${{ github.run_number }}\n$(date '+%Y-%m-%d')\n$ESCAPED_COMMITS\n"
 
           if [ -f CHANGELOG.md ]; then
             if ! grep -q "v${{ github.run_number }}" CHANGELOG.md; then
