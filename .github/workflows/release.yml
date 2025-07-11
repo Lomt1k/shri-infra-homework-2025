@@ -39,6 +39,11 @@ jobs:
           git checkout -b releases/${{ github.run_number }}
           git push origin releases/${{ github.run_number }}
 
+      - name: 🔄 Переключиться на main
+        run: |
+          git checkout main
+          git pull origin main
+
       - name: 🐳 Сборка Docker-образа
         run: |
           DOCKER_IMAGE_LATEST=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.run_number }}_latest
@@ -89,11 +94,6 @@ jobs:
         run: |
           git tag v${{ github.run_number }}
           git push origin v${{ github.run_number }}
-
-      - name: 🔄 Переключиться на main
-        run: |
-          git checkout main
-          git pull origin main
 
       - name: 📝 Обновление CHANGELOG.md
         run: |
