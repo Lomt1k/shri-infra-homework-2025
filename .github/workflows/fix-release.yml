@@ -1,0 +1,147 @@
+name: 🛠️ Фикс релиза
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        type: string
+        description: "Версия релиза, для которого создаётся фикс (например, 12)"
+        required: true
+
+jobs:
+  fix_release:
+    name: 📦 Фикс релиза v${{ github.run_number }}
+    runs-on: ubuntu-latest
+    environment: production
+
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    env:
+      REGISTRY_URL: cr.yandex
+      APP_NAME: app
+      YC_REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
+
+    steps:
+      - name: 🔍 Checkout кода
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Получаем всю историю и теги
+
+      - name: 🧠 Настройка Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 📦 Установка зависимостей
+        run: npm ci
+
+      - name: 🧹 Параллельная проверка — линтер
+        run: npm run lint
+
+      - name: 🧪 Параллельная проверка — тесты
+        run: npm run test
+
+      - name: 🔄 Переключение на релизную ветку
+        run: |
+          git checkout releases/${{ github.workflow.inputs.release_version }}
+          git pull origin releases/${{ github.workflow.inputs.release_version }}
+
+      - name: 📋 Посмотреть все теги (для отладки)
+        run: |
+          git fetch --tags
+          git tag
+
+      - name: 📜 Получение списка коммитов с прошлого фикса или релиза
+        id: commits
+        run: |
+          git fetch --tags
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo 'initial')
+
+          echo "LAST_TAG: $LAST_TAG"
+
+          if [ "$LAST_TAG" = "initial" ]; then
+            if git rev-parse --verify HEAD > /dev/null 2>&1; then
+              COMMITS="Первый релиз"
+            else
+              COMMITS="Репозиторий пуст"
+            fi
+          else
+            COMMITS=$(git log --pretty=format:"- %s" $LAST_TAG..HEAD)
+          fi
+
+          if [ -z "$COMMITS" ]; then
+            COMMITS="Нет новых коммитов"
+          fi
+
+          ESCAPED_COMMITS=$(echo "$COMMITS" | sed -z 's/\n/\\n/g')
+
+          printf 'commits=%s\n' "$ESCAPED_COMMITS" >> $GITHUB_OUTPUT
+
+      - name: 🐳 Сборка Docker-образа
+        run: |
+          DOCKER_IMAGE_FIX=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.workflow.inputs.release_version }}_fix${{ github.run_number }}
+          DOCKER_IMAGE_LATEST=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.workflow.inputs.release_version }}_latest
+          docker build -t $DOCKER_IMAGE_FIX .
+          docker tag $DOCKER_IMAGE_FIX $DOCKER_IMAGE_LATEST
+
+      - name: 🔐 Авторизация в Yandex Container Registry
+        run: |
+          echo "${{ secrets.YC_OAUTH_TOKEN }}" | docker login --username oauth --password-stdin $REGISTRY_URL
+
+      - name: 📤 Загрузка образа в Container Registry
+        run: |
+          DOCKER_IMAGE_FIX=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.workflow.inputs.release_version }}_fix${{ github.run_number }}
+          DOCKER_IMAGE_LATEST=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.workflow.inputs.release_version }}_latest
+          docker push $DOCKER_IMAGE_FIX
+          docker push $DOCKER_IMAGE_LATEST
+
+      - name: 🏷 Создание тега фикса
+        run: |
+          git config --global user.email "github-actions@example.com"
+          git config --global user.name "GitHub Actions"
+          git tag v${{ github.workflow.inputs.release_version }}.fix.${{ github.run_number }}
+          git push origin v${{ github.workflow.inputs.release_version }}.fix.${{ github.run_number }}
+
+      - name: 🧾 Добавление комментария к Issue релиза
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const lines = process.env.COMMITS ? process.env.COMMITS.split('\\n') : ['Нет новых коммитов'];
+            const formatted = lines.join('\n');
+
+            const body = `
+              📅 Дата: ${new Date().toISOString()}
+              👨‍💻 Автор: ${{ github.actor }}
+              📦 Версия: ${{ github.workflow.inputs.release_version }}.fix.${{ github.run_number }}
+              📌 Коммиты с прошлого релиза:
+              ${formatted}
+              📦 Docker image: ${{ env.REGISTRY_URL }}://${{ env.YC_REGISTRY_ID }}://${{ env.APP_NAME }}:${{ github.workflow.inputs.release_version }}_fix${{ github.run_number }}
+            `;
+
+            // Ищем Issue по заголовку
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              creator: 'github-actions[bot]',
+              state: 'open',
+              per_page: 100,
+              labels: ''
+            });
+
+            const targetIssue = issues.find(issue => issue.title.includes("🚀 Выпуск релиза v${{ github.workflow.inputs.release_version }}"));
+
+            if (targetIssue) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: targetIssue.number,
+                body: body
+              });
+            } else {
+              console.log('Не найдено Issue для релиза v${{ github.workflow.inputs.release_version }}');
+            }
+        env:
+          COMMITS: ${{ steps.commits.outputs.commits }}
