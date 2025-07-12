@@ -25,6 +25,10 @@ jobs:
       YC_REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
 
     steps:
+      - name: Дебаг - посмотрим входные данные
+        run: |
+          echo "release_version = ${{ github.workflow.inputs.release_version }}"
+
       - name: 🔍 Checkout кода
         uses: actions/checkout@v4
         with:
