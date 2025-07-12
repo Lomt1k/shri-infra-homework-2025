@@ -1,3 +1,11 @@
+## v38
+2025-07-12
+- Merge pull request #71 from Lomt1k/temp
+- Первая попытка в deploy.yml
+- Merge pull request #70 from Lomt1k/temp
+- small fix
+- Merge pull request #69 from Lomt1k/update-changelog/v37
+- docs: обновление CHANGELOG для v37
 ## v37
 2025-07-12
 - Merge pull request #67 from Lomt1k/temp
