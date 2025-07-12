@@ -3,7 +3,7 @@ name: 🛠️ Фикс релиза
 on:
   workflow_dispatch:
     inputs:
-      relVersion:
+      release_version:
         type: string
         description: "Версия релиза, для которого создаётся фикс (например, 12)"
         required: true
@@ -23,11 +23,12 @@ jobs:
       REGISTRY_URL: cr.yandex
       APP_NAME: app
       YC_REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
+      RELEASE_VERSION: ${{ github.event.inputs.release_version }}
 
     steps:
       - name: Дебаг - посмотрим входные данные
         run: |
-          echo "release_version = ${{ github.workflow.inputs.relVersion }}"
+          echo "release_version = ${RELEASE_VERSION}"
 
       - name: 🔍 Checkout кода
         uses: actions/checkout@v4
@@ -40,11 +41,9 @@ jobs:
           node-version: 22
 
       - name: 🔁 Переключение на релизную ветку
-        env:
-          RELEASE_BRANCH: releases/${{ github.workflow.inputs.relVersion }}
         run: |
-          git fetch origin $RELEASE_BRANCH
-          git checkout -b $RELEASE_BRANCH origin/$RELEASE_BRANCH
+          git fetch origin releases/${RELEASE_VERSION}
+          git checkout -b releases/${RELEASE_VERSION} origin/releases/${RELEASE_VERSION}
 
       - name: 📦 Установка зависимостей
         run: npm ci
@@ -88,8 +87,8 @@ jobs:
 
       - name: 🐳 Сборка Docker-образа
         run: |
-          DOCKER_IMAGE_FIX=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.workflow.inputs.relVersion }}_fix${{ github.run_number }}
-          DOCKER_IMAGE_LATEST=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.workflow.inputs.relVersion }}_latest
+          DOCKER_IMAGE_FIX=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${RELEASE_VERSION}_fix${{ github.run_number }}
+          DOCKER_IMAGE_LATEST=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${RELEASE_VERSION}_latest
           docker build -t $DOCKER_IMAGE_FIX .
           docker tag $DOCKER_IMAGE_FIX $DOCKER_IMAGE_LATEST
 
@@ -99,8 +98,8 @@ jobs:
 
       - name: 📤 Загрузка образа в Container Registry
         run: |
-          DOCKER_IMAGE_FIX=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.workflow.inputs.relVersion }}_fix${{ github.run_number }}
-          DOCKER_IMAGE_LATEST=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${{ github.workflow.inputs.relVersion }}_latest
+          DOCKER_IMAGE_FIX=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${RELEASE_VERSION}_fix${{ github.run_number }}
+          DOCKER_IMAGE_LATEST=${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${RELEASE_VERSION}_latest
           docker push $DOCKER_IMAGE_FIX
           docker push $DOCKER_IMAGE_LATEST
 
@@ -108,8 +107,8 @@ jobs:
         run: |
           git config --global user.email "github-actions@example.com"
           git config --global user.name "GitHub Actions"
-          git tag v${{ github.workflow.inputs.relVersion }}.fix.${{ github.run_number }}
-          git push origin v${{ github.workflow.inputs.relVersion }}.fix.${{ github.run_number }}
+          git tag v${RELEASE_VERSION}.fix.${{ github.run_number }}
+          git push origin v${RELEASE_VERSION}.fix.${{ github.run_number }}
 
       - name: 🧾 Добавление комментария к Issue релиза
         uses: actions/github-script@v6
@@ -121,10 +120,10 @@ jobs:
             const body = `
               📅 Дата: ${new Date().toISOString()}
               👨‍💻 Автор: ${{ github.actor }}
-              📦 Версия: ${{ github.workflow.inputs.relVersion }}.fix.${{ github.run_number }}
+              📦 Версия: ${RELEASE_VERSION}.fix.${{ github.run_number }}
               📌 Коммиты с прошлого релиза:
               ${formatted}
-              📦 Docker image: ${{ env.REGISTRY_URL }}://${{ env.YC_REGISTRY_ID }}://${{ env.APP_NAME }}:${{ github.workflow.inputs.relVersion }}_fix${{ github.run_number }}
+              📦 Docker image: ${{ env.REGISTRY_URL }}://${{ env.YC_REGISTRY_ID }}://${{ env.APP_NAME }}:${RELEASE_VERSION}_fix${{ github.run_number }}
             `;
 
             // Ищем Issue по заголовку
@@ -137,7 +136,7 @@ jobs:
               labels: ''
             });
 
-            const targetIssue = issues.find(issue => issue.title.includes("🚀 Выпуск релиза v${{ github.workflow.inputs.relVersion }}"));
+            const targetIssue = issues.find(issue => issue.title.includes("🚀 Выпуск релиза v${RELEASE_VERSION}"));
 
             if (targetIssue) {
               await github.rest.issues.createComment({
@@ -147,7 +146,7 @@ jobs:
                 body: body
               });
             } else {
-              console.log('Не найдено Issue для релиза v${{ github.workflow.inputs.relVersion }}');
+              console.log('Не найдено Issue для релиза v${RELEASE_VERSION}');
             }
         env:
           COMMITS: ${{ steps.commits.outputs.commits }}
