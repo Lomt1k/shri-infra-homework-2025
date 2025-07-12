@@ -35,10 +35,12 @@ jobs:
         with:
           node-version: 22
 
-      - name: 🔄 Переключение на релизную ветку
+      - name: 🔁 Переключение на релизную ветку
+        env:
+          RELEASE_BRANCH: releases/${{ github.workflow.inputs.release_version }}
         run: |
-          git checkout releases/${{ github.workflow.inputs.release_version }}
-          git pull origin releases/${{ github.workflow.inputs.release_version }}
+          git fetch origin $RELEASE_BRANCH
+          git checkout -b $RELEASE_BRANCH origin/$RELEASE_BRANCH
 
       - name: 📦 Установка зависимостей
         run: npm ci
