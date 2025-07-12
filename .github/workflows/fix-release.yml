@@ -26,10 +26,6 @@ jobs:
       RELEASE_VERSION: ${{ github.event.inputs.release_version }}
 
     steps:
-      - name: Дебаг - посмотрим входные данные
-        run: |
-          echo "release_version = ${RELEASE_VERSION}"
-
       - name: 🔍 Checkout кода
         uses: actions/checkout@v4
         with:
@@ -121,9 +117,9 @@ jobs:
               📅 Дата: ${new Date().toISOString()}
               👨‍💻 Автор: ${{ github.actor }}
               📦 Версия: ${{ env.RELEASE_VERSION }}.fix.${{ github.run_number }}
+              📦 Docker image: ${{ env.REGISTRY_URL }}://${{ env.YC_REGISTRY_ID }}://${{ env.APP_NAME }}:${{ env.RELEASE_VERSION }}_fix${{ github.run_number }}
               📌 Коммиты с прошлого релиза:
               ${formatted}
-              📦 Docker image: ${{ env.REGISTRY_URL }}://${{ env.YC_REGISTRY_ID }}://${{ env.APP_NAME }}:${{ env.RELEASE_VERSION }}_fix${{ github.run_number }}
             `;
 
             // Ищем Issue по заголовку
