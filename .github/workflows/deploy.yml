@@ -1,50 +1,27 @@
-name: 🚀 Выкатка релиза в прод
+name: 🚚 Деплой релиза в продакшн
 
 on:
   workflow_dispatch:
     inputs:
       release_version:
         type: string
-        description: "Версия релиза для выливки в продакшн"
+        description: "Release version"
         required: true
 
 jobs:
-  deploy_to_prod:
-    name: 📦 Выливка v${{ github.workflow.inputs.release_version }} в прод
+  deploy:
     runs-on: ubuntu-latest
-    environment: production
-
-    permissions:
-      contents: write
-      issues: write
 
     env:
-      REGISTRY_URL: cr.yandex
-      APP_NAME: app
       YC_REGISTRY_ID: ${{ secrets.YC_REGISTRY_ID }}
-      RELEASE_VERSION: ${{ github.workflow.inputs.release_version }}
       SSH_KEY: ${{ secrets.SSH_KEY }}
       SERVER_HOST: 158.160.191.214
       SERVER_USER: lomt1k
 
     steps:
-      - name: 🔍 Checkout кода
-        uses: actions/checkout@v4
-
-      - name: 🧪 Проверка наличия Docker-образа в Container Registry
+      - name: 🔍 Проверить наличие Docker-образа
         run: |
-          echo "Проверяем наличие образа: ${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${RELEASE_VERSION}_latest"
-
-          # Авторизация
-          echo "${{ secrets.YC_OAUTH_TOKEN }}" | docker login --username oauth --password-stdin ${REGISTRY_URL}
-
-          # Попытка скачать манифест (для проверки существования)
-          if ! crane manifest ${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${RELEASE_VERSION}_latest > /dev/null 2>&1; then
-            echo "❌ Образ ${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${RELEASE_VERSION}_latest не найден!"
-            exit 1
-          else
-            echo "✅ Образ найден — можно продолжать деплой."
-          fi
+          echo "Убедитесь, что образ cr.yandex://${YC_REGISTRY_ID}://${APP_NAME}:${{ github.event.inputs.release_version }}_latest есть в Container Registry"
 
       - name: 🚚 Деплой на сервер через SSH
         uses: appleboy/ssh-action@v1.0.0
@@ -53,51 +30,18 @@ jobs:
           username: ${{ env.SERVER_USER }}
           key: ${{ env.SSH_KEY }}
           script: |
-            echo "🔍 Обновляем локальный образ"
-            docker pull ${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${RELEASE_VERSION}_latest
-
-            echo "🛑 Останавливаем старый контейнер"
+            docker pull cr.yandex/${YC_REGISTRY_ID}/app:${{ github.event.inputs.release_version }}_latest
             docker stop shri-infra || true
-
-            echo "🗑 Удаляем старый контейнер"
             docker rm shri-infra || true
+            docker run -d --name shri-infra -p 3000:3000 cr.yandex/${YC_REGISTRY_ID}/app:${{ github.event.inputs.release_version }}_latest
 
-            echo "🚀 Запускаем новый контейнер"
-            docker run -d \
-              --name shri-infra \
-              -p 3000:3000 \
-              ${REGISTRY_URL}/${YC_REGISTRY_ID}/${APP_NAME}:${RELEASE_VERSION}_latest
+      - name: 🔁 Checkout кода
+        uses: actions/checkout@v4
 
-      - name: 🧾 Добавление комментария к Issue о выкатке
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const body = `
-              🚀 Релиз v${{ env.RELEASE_VERSION }} выкачен в прод
-              📅 Дата: ${new Date().toISOString()}
-              👨‍💻 Автор: ${{ github.actor }}
-              🌐 Адрес приложения: http://${{ env.SERVER_HOST }}:3000/hw/store
-            `;
-
-            // Ищем Issue по заголовку
-            const { data: issues } = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              creator: 'github-actions[bot]',
-              state: 'all',
-              per_page: 100,
-              labels: ''
-            });
-
-            const targetIssue = issues.find(issue => issue.title.includes("🚀 Выпуск релиза v${{ env.RELEASE_VERSION }}"));
-
-            if (targetIssue) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: targetIssue.number,
-                body: body
-              });
-            } else {
-              console.log('Не найдено Issue для релиза v${{ env.RELEASE_VERSION }}');
-            }
+      - name: 💬 Оставить комментарий в Issue
+        run: |
+          gh issue comment \
+            $(gh issue list --search "Release v${{ github.event.inputs.release_version }}" --json number --jq '.[0].number') \
+            --body $'🚀 Релиз v'"${{ github.event.inputs.release_version }}"$' выкачен в прод\n'"$(date)"$'\n🧑‍💻 Автор: '"${{ github.actor }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
