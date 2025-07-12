@@ -120,10 +120,10 @@ jobs:
             const body = `
               📅 Дата: ${new Date().toISOString()}
               👨‍💻 Автор: ${{ github.actor }}
-              📦 Версия: ${RELEASE_VERSION}.fix.${{ github.run_number }}
+              📦 Версия: ${{ env.RELEASE_VERSION }}.fix.${{ github.run_number }}
               📌 Коммиты с прошлого релиза:
               ${formatted}
-              📦 Docker image: ${{ env.REGISTRY_URL }}://${{ env.YC_REGISTRY_ID }}://${{ env.APP_NAME }}:${RELEASE_VERSION}_fix${{ github.run_number }}
+              📦 Docker image: ${{ env.REGISTRY_URL }}://${{ env.YC_REGISTRY_ID }}://${{ env.APP_NAME }}:${{ env.RELEASE_VERSION }}_fix${{ github.run_number }}
             `;
 
             // Ищем Issue по заголовку
@@ -136,7 +136,7 @@ jobs:
               labels: ''
             });
 
-            const targetIssue = issues.find(issue => issue.title.includes("🚀 Выпуск релиза v${RELEASE_VERSION}"));
+            const targetIssue = issues.find(issue => issue.title.includes("🚀 Выпуск релиза v${{ env.RELEASE_VERSION }}"));
 
             if (targetIssue) {
               await github.rest.issues.createComment({
@@ -146,7 +146,7 @@ jobs:
                 body: body
               });
             } else {
-              console.log('Не найдено Issue для релиза v${RELEASE_VERSION}');
+              console.log('Не найдено Issue для релиза v${{ env.RELEASE_VERSION }}');
             }
         env:
           COMMITS: ${{ steps.commits.outputs.commits }}
